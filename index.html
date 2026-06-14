@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>台股部位 / 風險計算機</title>
+<meta name="description" content="台股部位大小與風險計算機：依本金、單筆風險、停損自動算出該買幾張，並用單檔資金上限封頂。停損停利可用 % 或價位，內建券商折扣與證交稅。純前端，資料不外傳。">
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel-2:#1c2230; --border:#2a313c;
+    --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --accent-2:#1f6feb;
+    --green:#3fb950; --red:#f85149; --amber:#d29922;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,"Segoe UI","PingFang TC","Microsoft JhengHei",sans-serif;
+    background:radial-gradient(1200px 600px at 70% -10%,#16203a 0%,var(--bg) 55%);
+    color:var(--text);min-height:100vh;line-height:1.5;
+    padding:14px 16px 40px;
+  }
+  .wrap{max-width:920px;margin:0 auto}
+  header{text-align:center;margin-bottom:14px}
+  header h1{font-size:1.3rem;font-weight:700;letter-spacing:.5px}
+  header p{color:var(--muted);font-size:.85rem;margin-top:2px}
+  .badge{display:inline-block;font-size:.7rem;color:var(--green);
+    border:1px solid #2ea04340;background:#2ea04314;border-radius:999px;
+    padding:2px 10px;margin-top:5px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--border);
+    border-radius:var(--radius);padding:16px 18px}
+  .card h2{font-size:.82rem;text-transform:uppercase;letter-spacing:1px;
+    color:var(--muted);margin-bottom:12px;font-weight:600}
+  .field{margin-bottom:10px}
+  .field>label{display:block;font-size:.82rem;color:var(--muted);margin-bottom:6px}
+  .field .hint{font-size:.72rem;color:#6e7681;margin-top:4px}
+  .field .hint b{color:var(--accent);font-weight:600}
+  input[type=number],input[type=text]{
+    width:100%;background:var(--panel-2);border:1px solid var(--border);
+    color:var(--text);border-radius:10px;padding:11px 12px;font-size:1rem;
+    transition:border-color .15s,box-shadow .15s}
+  input:focus{outline:none;border-color:var(--accent);
+    box-shadow:0 0 0 3px #1f6feb33}
+  .seg{display:flex;background:var(--panel-2);border:1px solid var(--border);
+    border-radius:10px;padding:3px;gap:3px}
+  .seg button{flex:1;background:transparent;border:none;color:var(--muted);
+    padding:8px;border-radius:7px;cursor:pointer;font-size:.85rem;font-weight:600;
+    transition:.15s}
+  .seg button.on{background:var(--accent-2);color:#fff}
+  .seg.dir button.on.short{background:var(--red)}
+  .row{display:flex;gap:12px}
+  .row>*{flex:1}
+  .field-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px}
+  .field-head label{font-size:.82rem;color:var(--muted)}
+  .unit-toggle{display:flex;gap:2px;background:var(--panel-2);
+    border:1px solid var(--border);border-radius:7px;padding:2px;flex-shrink:0}
+  .unit-toggle button{border:none;background:transparent;color:var(--muted);
+    font-size:.72rem;padding:3px 9px;border-radius:5px;cursor:pointer;font-weight:700}
+  .unit-toggle button.on{background:var(--accent-2);color:#fff}
+  details{margin-top:6px;border-top:1px dashed var(--border);padding-top:12px}
+  summary{cursor:pointer;color:var(--accent);font-size:.85rem;list-style:none}
+  summary::-webkit-details-marker{display:none}
+  summary::before{content:"⚙ ";opacity:.7}
+  /* results */
+  .res-hero{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
+  .res-hero .big{font-size:2.6rem;font-weight:800;color:var(--accent)}
+  .res-hero .unit{font-size:1rem;color:var(--muted)}
+  .res-sub{color:var(--muted);font-size:.85rem;margin-bottom:14px}
+  .bound{font-size:.78rem;border-radius:8px;padding:8px 10px;margin-bottom:14px}
+  .bound.cap{background:#d2992214;border:1px solid #d2992240;color:var(--amber)}
+  .bound.risk{background:#1f6feb14;border:1px solid #1f6feb40;color:var(--accent)}
+  .bound .bnote{display:block;margin-top:3px;font-size:.72rem;opacity:.85;font-weight:400}
+  .stat{display:flex;justify-content:space-between;align-items:center;
+    padding:10px 0;border-bottom:1px solid #21262d}
+  .stat:last-child{border-bottom:none}
+  .stat .k{color:var(--muted);font-size:.88rem}
+  .stat .v{font-weight:700;font-size:1rem;font-variant-numeric:tabular-nums}
+  .v.green{color:var(--green)} .v.red{color:var(--red)} .v.amber{color:var(--amber)}
+  .rr-wrap{margin-top:16px;background:var(--panel-2);border-radius:10px;padding:14px}
+  .rr-bar{height:10px;border-radius:6px;display:flex;overflow:hidden;margin-top:8px;background:#21262d}
+  .rr-bar .risk{background:var(--red)} .rr-bar .reward{background:var(--green)}
+  .rr-label{display:flex;justify-content:space-between;font-size:.78rem;color:var(--muted)}
+  .warn{color:var(--amber);font-size:.82rem;margin-top:12px;display:none}
+  .warn.show{display:block}
+  footer{text-align:center;color:#6e7681;font-size:.78rem;margin-top:28px}
+  footer a{color:var(--accent);text-decoration:none}
+  .empty{color:var(--muted);text-align:center;padding:40px 0;font-size:.9rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>台股部位 / 風險計算機</h1>
+    <p>先決定能虧多少，再決定買多少張。</p>
+    <span class="badge">● 純前端計算 · 資料不外傳</span>
+  </header>
+
+  <div class="grid">
+    <!-- INPUTS -->
+    <div class="card">
+      <h2>輸入條件</h2>
+
+      <div class="field">
+        <label>方向</label>
+        <div class="seg dir" id="dirSeg">
+          <button class="on" data-dir="long">做多</button>
+          <button data-dir="short" class="short">做空</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>帳戶本金 (NT$)</label>
+        <input type="number" id="capital" value="500000" min="0" step="10000">
+        <div class="hint">你整個帳戶的總資金（不是這一檔）</div>
+      </div>
+
+      <div class="field">
+        <label>單筆風險 (%)</label>
+        <input type="number" id="riskPct" value="1" min="0" step="0.1">
+        <div class="hint">每筆交易願意虧掉本金的百分比，常見 0.5%～2%</div>
+      </div>
+
+      <div class="field">
+        <div class="field-head">
+          <label>單檔資金上限</label>
+          <div class="unit-toggle" id="capToggle">
+            <button class="on" data-m="amount">金額</button>
+            <button data-m="pct">%</button>
+          </div>
+        </div>
+        <input type="number" id="cap" value="10000" min="0" step="1000">
+        <div class="hint" id="capHint"></div>
+      </div>
+
+      <div class="field">
+        <label>進場價</label>
+        <input type="number" id="entry" value="500" min="0" step="0.05">
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <div class="field-head">
+            <label>停利（選填）</label>
+            <div class="unit-toggle" id="targetToggle">
+              <button class="on" data-m="pct">%</button>
+              <button data-m="price">價位</button>
+            </div>
+          </div>
+          <input type="number" id="target" value="20" min="0" step="0.1">
+          <div class="hint" id="targetHint"></div>
+        </div>
+        <div class="field">
+          <div class="field-head">
+            <label>停損</label>
+            <div class="unit-toggle" id="stopToggle">
+              <button class="on" data-m="pct">%</button>
+              <button data-m="price">價位</button>
+            </div>
+          </div>
+          <input type="number" id="stop" value="15" min="0" step="0.1">
+          <div class="hint" id="stopHint"></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>交易單位</label>
+        <div class="seg" id="unitSeg">
+          <button class="on" data-unit="share">零股（1 股）</button>
+          <button data-unit="lot">整張（1000 股）</button>
+        </div>
+      </div>
+
+      <details>
+        <summary>交易成本（手續費 / 證交稅）<span id="costSummary" style="color:var(--muted)"></span></summary>
+        <div style="margin-top:12px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--muted);cursor:pointer">
+            <input type="checkbox" id="useCost" checked style="width:auto"> 計入成本到損益
+          </label>
+          <div class="row" style="margin-top:10px">
+            <div class="field" style="margin-bottom:0">
+              <label>手續費率 (%)</label>
+              <input type="number" id="feeRate" value="0.1425" step="0.0001">
+            </div>
+            <div class="field" style="margin-bottom:0">
+              <label>券商折扣（折）</label>
+              <input type="number" id="discount" value="2.8" step="0.1" min="0" max="10">
+              <div class="hint" id="feeHint"></div>
+            </div>
+          </div>
+          <div class="field" style="margin-top:10px;margin-bottom:0;max-width:50%">
+            <label>證交稅 (%)</label>
+            <input type="number" id="taxRate" value="0.3" step="0.05">
+            <div class="hint">賣出課，當沖減半</div>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- RESULTS -->
+    <div class="card">
+      <h2>計算結果</h2>
+      <div id="results">
+        <div class="empty">填入條件即時計算…</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    純前端工具，所有計算都在你的瀏覽器完成，不上傳任何資料。<br>
+    僅供部位規劃參考，非投資建議。
+  </footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const state = { dir:'long', unit:'share', stopMode:'pct', targetMode:'pct', capMode:'amount' };
+
+// --- segmented controls ---
+document.querySelectorAll('#dirSeg button').forEach(b=>b.onclick=()=>{
+  state.dir=b.dataset.dir;
+  document.querySelectorAll('#dirSeg button').forEach(x=>x.classList.toggle('on',x===b));
+  calc();
+});
+document.querySelectorAll('#unitSeg button').forEach(b=>b.onclick=()=>{
+  state.unit=b.dataset.unit;
+  document.querySelectorAll('#unitSeg button').forEach(x=>x.classList.toggle('on',x===b));
+  calc();
+});
+
+// --- %/price toggles for stop & target (auto-convert via entry) ---
+function setUnitMode(which,m){
+  const stateKey = which==='stop' ? 'stopMode' : 'targetMode';
+  if(m===state[stateKey]) return;
+  const entry=+$('entry').value, cur=+$(which).value, long=state.dir==='long';
+  if(entry>0 && cur>0){
+    const isStop = which==='stop';
+    const below = isStop ? long : !long;   // stop(long)→below entry; target(long)→above
+    if(m==='price') $(which).value = +(below ? entry*(1-cur/100) : entry*(1+cur/100)).toFixed(2);
+    else            $(which).value = +(Math.abs(entry-cur)/entry*100).toFixed(2);
+  }
+  state[stateKey]=m;
+  document.querySelectorAll('#'+which+'Toggle button')
+    .forEach(b=>b.classList.toggle('on',b.dataset.m===m));
+  calc();
+}
+document.querySelectorAll('#stopToggle button').forEach(b=>b.onclick=()=>setUnitMode('stop',b.dataset.m));
+document.querySelectorAll('#targetToggle button').forEach(b=>b.onclick=()=>setUnitMode('target',b.dataset.m));
+
+// --- 金額/% toggle for cap (auto-convert via capital) ---
+document.querySelectorAll('#capToggle button').forEach(b=>b.onclick=()=>{
+  const m=b.dataset.m; if(m===state.capMode) return;
+  const capital=+$('capital').value, cur=+$('cap').value;
+  if(capital>0 && cur>0){
+    if(m==='amount') $('cap').value = +(capital*cur/100).toFixed(0);   // % -> 金額
+    else             $('cap').value = +(cur/capital*100).toFixed(2);   // 金額 -> %
+  }
+  state.capMode=m;
+  document.querySelectorAll('#capToggle button').forEach(x=>x.classList.toggle('on',x===b));
+  calc();
+});
+
+['capital','riskPct','cap','entry','stop','target','feeRate','discount','taxRate','useCost']
+  .forEach(id=>$(id).addEventListener('input',calc));
+
+const nt = n => 'NT$ ' + Math.round(n).toLocaleString('en-US');
+const pct = n => n.toFixed(2) + '%';
+
+function resolveStop(entry,long){
+  const v=+$('stop').value;
+  if(state.stopMode==='pct') return long ? entry*(1-v/100) : entry*(1+v/100);
+  return v;
+}
+function resolveTarget(entry,long){
+  const v=+$('target').value;
+  if(!(v>0)) return 0;
+  if(state.targetMode==='pct') return long ? entry*(1+v/100) : entry*(1-v/100);
+  return v;
+}
+
+function calc(){
+  const capital=+$('capital').value, riskPct=+$('riskPct').value;
+  const entry=+$('entry').value;
+  const long = state.dir==='long';
+  const stop = resolveStop(entry,long);
+  const target = resolveTarget(entry,long);
+  const lotSize = state.unit==='lot' ? 1000 : 1;
+  const unitName = lotSize===1000 ? '張' : '股';
+  const useCost = $('useCost').checked;
+  const baseFee=+$('feeRate').value/100, discount=+$('discount').value, taxRate=+$('taxRate').value/100;
+  const effFee = baseFee * (discount/10);          // 折扣後實收手續費率
+
+  // cap limit (金額 or %)
+  const capVal=+$('cap').value;
+  const capLimit = state.capMode==='pct' ? capital*capVal/100 : capVal;
+
+  // live hints
+  $('feeHint').innerHTML = `實收 ≈ <b>${(effFee*100).toFixed(4)}%</b>`;
+  $('costSummary').textContent = useCost ? `· 已計入（券商 ${discount} 折）` : '· 未計入';
+  if(capital>0 && capVal>0){
+    $('capHint').innerHTML = state.capMode==='amount'
+      ? `= 佔本金 <b>${(capLimit/capital*100).toFixed(1)}%</b>`
+      : `= <b>${nt(capLimit)}</b>`;
+  } else $('capHint').innerHTML = '不限（只看風險）';
+  if(entry>0 && +$('stop').value>0){
+    const sp=((long?entry-stop:stop-entry)/entry*100);
+    $('stopHint').innerHTML = state.stopMode==='pct'?`停損價 ≈ <b>${stop.toFixed(2)}</b>`:`距進場 <b>${sp.toFixed(2)}%</b>`;
+  } else $('stopHint').textContent='';
+  if(entry>0 && +$('target').value>0){
+    const tp=((long?target-entry:entry-target)/entry*100);
+    $('targetHint').innerHTML = state.targetMode==='pct'?`目標價 ≈ <b>${target.toFixed(2)}</b>`:`距進場 <b>${tp.toFixed(2)}%</b>`;
+  } else $('targetHint').textContent='';
+
+  const out=$('results');
+  const perShareRisk = long ? entry-stop : stop-entry;
+
+  if(!(capital>0 && entry>0 && riskPct>0)){
+    out.innerHTML='<div class="empty">填入本金、進場價與風險 %…</div>'; return;
+  }
+  if(perShareRisk<=0){
+    out.innerHTML='<div class="empty" style="color:var(--amber)">⚠ 停損方向不對：'+
+      (long?'做多時停損要低於進場價':'做空時停損要高於進場價')+'</div>'; return;
+  }
+
+  // risk-based vs cap-based, take the smaller
+  const riskAmount = capital*riskPct/100;
+  const riskUnits = Math.floor((riskAmount/perShareRisk)/lotSize);
+  const capUnits  = capLimit>0 ? Math.floor((capLimit/entry)/lotSize) : Infinity;
+
+  if(riskUnits<=0){
+    out.innerHTML=`<div class="empty" style="color:var(--amber)">⚠ 以此風險連 1 ${unitName}都買不起，請放大風險 % 或縮小停損距離。</div>`; return;
+  }
+  if(capUnits<=0){
+    out.innerHTML=`<div class="empty" style="color:var(--amber)">⚠ 單檔資金上限連 1 ${unitName}都不夠，請提高上限。</div>`; return;
+  }
+
+  const units = Math.min(riskUnits, capUnits);
+  const shares = units*lotSize;
+  const boundBy = capUnits < riskUnits ? 'cap' : 'risk';
+
+  const positionValue = shares*entry;
+  const posPctCapital = positionValue/capital*100;
+  const actualRisk = shares*perShareRisk;
+  const actualRiskPct = actualRisk/capital*100;
+
+  let entryFee=0, exitFee=0, tax=0;
+  if(useCost){
+    entryFee = positionValue*effFee;
+    exitFee  = shares*stop*effFee;
+    tax      = shares*stop*taxRate;
+  }
+  const riskWithCost = actualRisk + (useCost ? entryFee+exitFee+tax : 0);
+
+  let rrHtml='', potReward=0, rr=0;
+  const validTarget = target>0 && (long ? target>entry : target<entry);
+  if(validTarget){
+    const perShareReward = long ? target-entry : entry-target;
+    potReward = shares*perShareReward;
+    if(useCost){
+      potReward -= entryFee + shares*target*effFee + shares*target*taxRate;
+    }
+    rr = potReward/riskWithCost;
+    const total = Math.abs(potReward)+riskWithCost;
+    const rewardW = total>0 ? Math.abs(potReward)/total*100 : 50;
+    rrHtml = `
+      <div class="rr-wrap">
+        <div class="rr-label"><span>風報比 (R)</span>
+          <span class="${rr>=2?'green':rr>=1?'amber':'red'}" style="font-weight:700">${rr.toFixed(2)} : 1</span></div>
+        <div class="rr-bar"><div class="risk" style="width:${100-rewardW}%"></div><div class="reward" style="width:${rewardW}%"></div></div>
+        <div class="rr-label" style="margin-top:6px">
+          <span style="color:var(--red)">風險 ${nt(riskWithCost)}</span>
+          <span style="color:var(--green)">獲利 ${nt(potReward)}</span></div>
+      </div>`;
+  }
+
+  const boundHtml = boundBy==='cap'
+    ? `<div class="bound cap">📌 張數由<b>單檔資金上限</b>決定<span class="bnote">風險法本可買 ${riskUnits.toLocaleString()} ${unitName}，被資金上限壓到 ${units.toLocaleString()} ${unitName}</span></div>`
+    : `<div class="bound risk">📌 張數由<b>風險上限</b>決定${capUnits!==Infinity?`<span class="bnote">資金上限可容 ${capUnits.toLocaleString()} ${unitName}，還有空間</span>`:''}</div>`;
+
+  const concWarn = posPctCapital>100
+    ? `<div class="warn show">⚠ 部位金額已超過本金（${pct(posPctCapital)}），需動用融資才買得起。</div>`
+    : posPctCapital>40
+    ? `<div class="warn show">⚠ 單一部位佔本金 ${pct(posPctCapital)}，集中度偏高。</div>` : '';
+
+  const stopPctShow = (long?entry-stop:stop-entry)/entry*100;
+  const tgtPctShow = validTarget ? (long?target-entry:entry-target)/entry*100 : 0;
+
+  out.innerHTML = `
+    <div class="res-hero">
+      <span class="big">${units.toLocaleString()}</span>
+      <span class="unit">${unitName}（${shares.toLocaleString()} 股）</span>
+    </div>
+    <div class="res-sub">${long?'做多':'做空'} ＠ ${entry}　停損 ${stop.toFixed(2)}（-${stopPctShow.toFixed(1)}%）${validTarget?'　目標 '+target.toFixed(2)+'（+'+tgtPctShow.toFixed(1)+'%）':''}</div>
+    ${boundHtml}
+    <div class="stat"><span class="k">部位金額（這檔花多少）</span><span class="v">${nt(positionValue)}</span></div>
+    <div class="stat"><span class="k">佔本金比重</span><span class="v ${posPctCapital>100?'red':posPctCapital>40?'amber':''}">${pct(posPctCapital)}</span></div>
+    <div class="stat"><span class="k">每股風險</span><span class="v">${perShareRisk.toFixed(2)}</span></div>
+    <div class="stat"><span class="k">實際風險金額</span><span class="v red">${nt(riskWithCost)}</span></div>
+    <div class="stat"><span class="k">實際風險佔本金</span><span class="v red">${pct(actualRiskPct)}${useCost?' +成本':''}</span></div>
+    ${validTarget?`<div class="stat"><span class="k">潛在獲利${useCost?'（扣成本）':''}</span><span class="v green">${nt(potReward)}</span></div>`:''}
+    ${useCost?`<div class="stat"><span class="k">進出成本合計</span><span class="v amber">${nt(entryFee+exitFee+tax)}</span></div>`:''}
+    ${rrHtml}
+    ${concWarn}
+  `;
+}
+calc();
+</script>
+</body>
+</html>
